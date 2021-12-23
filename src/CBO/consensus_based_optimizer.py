@@ -7,7 +7,7 @@ from tensorflow.keras.optimizers import Optimizer
 
 
 class CBO(Optimizer):
-    def __init__(self, objective, dt, lmbda, sigma, alpha, initial_particles, anisotropic=True):
+    def __init__(self, objective, dt, lmbda, sigma, alpha, initial_particles, anisotropic=True, n_batches=None):
         super(CBO, self).__init__('Consensus Based Optimizer')
         self._objective = objective
         self._dt = dt
@@ -18,6 +18,7 @@ class CBO(Optimizer):
         self._V = initial_particles
         self._anisotropic = anisotropic
         self._noise = tfd.Normal(loc=0., scale=1.)
+        self._n_batches = 1 if n_batches is None else n_batches
 
     def minimizer(self):
         return self._compute_consensus_point()
@@ -25,18 +26,24 @@ class CBO(Optimizer):
     def particles(self):
         return self._V
 
-    def _compute_consensus_point(self):
-        values = np.array([self._objective(v) for v in self._V])
+    def _compute_consensus_point(self, batch=None):
+        V = self._V if batch is None else tf.gather_nd(self._V, indices=batch)
+        values = np.array([self._objective(v) for v in V])
         weights = np.exp(-self._get_hyper('alpha') * (values - values.min())).reshape(-1, 1)
-        return tf.reshape(tf.reduce_sum(self._V * weights, axis=0) / weights.sum(), (1, -1))
+        return tf.reshape(tf.reduce_sum(V * weights, axis=0) / weights.sum(), (1, -1))
 
     def _step(self):
-        V_alpha = self._compute_consensus_point()
-        noise = self._noise.sample(self._V.shape)
-        diff = self._V - V_alpha
-        noise_weight = tf.abs(diff) if self._anisotropic else tf.reshape(tf.norm(diff, ord=2, axis=1), (-1, 1))
-        self._V -= self._lambda * diff * self._dt
-        self._V += self._sigma * noise * noise_weight * self._dt ** 0.5
+        if self._n_batches == 1:
+            batches = np.arange(self._V.shape[0]).reshape(1, -1)
+        else:
+            batches = np.array_split(np.random.permutation(self._V.shape[0]), self._n_batches)
+        for batch in batches:
+            V_alpha = self._compute_consensus_point(batch.reshape(-1, 1))
+            noise = self._noise.sample(self._V.shape)
+            diff = self._V - V_alpha
+            noise_weight = tf.abs(diff) if self._anisotropic else tf.reshape(tf.norm(diff, ord=2, axis=1), (-1, 1))
+            self._V -= self._lambda * diff * self._dt
+            self._V += self._sigma * noise * noise_weight * self._dt ** 0.5
 
     def _resource_apply_dense(self, grad, var, apply_state=None):
         self._step()

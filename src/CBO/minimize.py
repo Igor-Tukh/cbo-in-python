@@ -22,7 +22,7 @@ DEFAULT_OPTIMIZER_CONFIG = {
 
 
 def minimize(objective, dimensionality, n_particles, time_horizon, optimizer_config=None, initial_distribution=None,
-             return_trajectory=False, verbose=True):
+             return_trajectory=False, verbose=True, n_batches=None):
     if optimizer_config is None:
         optimizer_config = DEFAULT_OPTIMIZER_CONFIG.copy()
     else:
@@ -34,6 +34,7 @@ def minimize(objective, dimensionality, n_particles, time_horizon, optimizer_con
     optimizer_config.update({
         'initial_particles': initial_distribution.sample((n_particles, dimensionality)),
         'objective': objective,
+        'n_batches': n_batches,
     })
     optimizer = CBO(**optimizer_config)
     trajectory = {}
