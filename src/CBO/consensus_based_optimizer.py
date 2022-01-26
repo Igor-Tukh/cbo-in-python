@@ -26,6 +26,9 @@ class CBO(Optimizer):
     def particles(self):
         return self._V
 
+    def update_objective(self, objective):
+        self._objective = objective
+
     def _compute_consensus_point(self, batch=None):
         V = self._V if batch is None else tf.gather_nd(self._V, indices=batch)
         values = np.array([self._objective(v) for v in V])
@@ -47,11 +50,11 @@ class CBO(Optimizer):
 
     def _resource_apply_dense(self, grad, var, apply_state=None):
         self._step()
-        var.assign(self._compute_consensus_point())
+        var.assign(tf.reshape(self._compute_consensus_point(), var.shape))
 
     def _resource_apply_sparse(self, grad, var, indices, apply_state=None):
         self._step()
-        var.assign(self._compute_consensus_point())
+        var.assign(tf.reshape(self._compute_consensus_point(), var.shape))
 
     def get_config(self):
         # TODO(itukh): think about the `objective` serialization
