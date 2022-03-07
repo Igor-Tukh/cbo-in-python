@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -7,6 +8,25 @@ from src.CBO.config import DEFAULT_OPTIMIZER_CONFIG, DEFAULT_INITIAL_DISTRIBUTIO
 from src.CBO.consensus_based_optimizer import CBO
 
 tfd = tfp.distributions
+
+
+class TensorboardLogging:
+    def __init__(self, model_name, log_dir):
+        self.model_name = model_name
+        self.train_summary_writer = tf.summary.create_file_writer(os.path.join(log_dir, model_name, 'train'))
+        self.test_summary_writer = tf.summary.create_file_writer(os.path.join(log_dir, model_name, 'test'))
+        self.train_loss = tf.keras.metrics.Mean('train_loss', dtype=tf.float32)
+        self.train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy('train_accuracy')
+        self.test_loss = tf.keras.metrics.Mean('test_loss', dtype=tf.float32)
+        self.test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy('test_accuracy')
+
+    def flush(self, epoch):
+        with self.train_summary_writer.as_default():
+            tf.summary.scalar('loss', self.train_loss.result(), step=epoch)
+            tf.summary.scalar('accuracy', self.train_accuracy.result(), step=epoch)
+        with self.test_summary_writer.as_default():
+            tf.summary.scalar('loss', self.test_loss.result(), step=epoch)
+            tf.summary.scalar('accuracy', self.test_accuracy.result(), step=epoch)
 
 
 class NeuralNetworkObjectiveFunction:
@@ -49,7 +69,7 @@ def update_model_parameters(model, parameters):
 
 def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
           initial_distribution=None, return_trajectory=False, verbose=True, particles_batches=None,
-          dataset_batches=None, X_val=None, y_val=None):
+          dataset_batches=None, X_val=None, y_val=None, tensorboard_logging=None):
     dimensionality = compute_model_dimensionality(model)
     if optimizer_config is None:
         optimizer_config = DEFAULT_OPTIMIZER_CONFIG.copy()
@@ -69,6 +89,7 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
     trajectory = {}
     var = tf.Variable(initial_distribution.sample(dimensionality))
     timestamp = 0
+    epoch = 0
     while np.less(timestamp, time_horizon):
         batches = np.array_split(np.random.permutation(X.shape[0]), dataset_batches)
         losses = []
@@ -78,6 +99,13 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
             #     logits = model(X[batch])
             #     loss_value = loss(y[batch], logits)
             # grads = tape.gradient(loss_value, model.trainable_weights)
+            logits = model(X[batch])
+            loss_value = loss(y[batch], logits)
+            y_pred = tf.nn.softmax(logits)
+            tensorboard_logging.train_loss(loss_value)
+            tensorboard_logging.train_accuracy(y[batch], y_pred)
+            accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+            accuracy.update_state(y[batch], y_pred)
 
             objective = NeuralNetworkObjectiveFunction(model, loss, X[batch], y[batch])
             optimizer.update_objective(objective)
@@ -90,15 +118,26 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
                     'consensus': optimizer.minimizer(),
                     'particles': optimizer.particles(),
                     'batch': batch,
+                    'accuracy': accuracy.result().numpy(),
                 }
             losses.append(objective(var))
             timestamp += optimizer_config['dt']
+            update_model_parameters(model, var)
         if verbose:
             print(f'Timestamp: {round(timestamp, 2)}, loss: {np.mean(losses)}', end='')
             if X_val is not None:
                 val_loss = NeuralNetworkObjectiveFunction(model, loss, X_val, y_val)(var)
                 print(f', validation loss: {val_loss}', end='')
             print()
+        if tensorboard_logging is not None:
+            if X_val is not None:
+                logits = model(X_val)
+                loss_value = loss(y_val, logits)
+                y_pred = tf.nn.softmax(logits)
+                tensorboard_logging.test_loss(loss_value)
+                tensorboard_logging.test_accuracy(y_val, y_pred)
+            tensorboard_logging.flush(epoch)
+        epoch += 1
     update_model_parameters(model, var)
     if return_trajectory:
         return model, trajectory
