@@ -93,7 +93,7 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
     while np.less(timestamp, time_horizon):
         batches = np.array_split(np.random.permutation(X.shape[0]), dataset_batches)
         losses = []
-        for batch in tqdm(batches):
+        for i, batch in tqdm(enumerate(batches)):
             # TODO(itukh) we can pass the actual gradients to the `minimize` call bellow
             # with tf.GradientTape() as tape:
             #     logits = model(X[batch])
@@ -106,7 +106,9 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
             tensorboard_logging.train_accuracy(y[batch], y_pred)
             accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
             accuracy.update_state(y[batch], y_pred)
-
+            acc = accuracy.result().numpy()
+            if verbose:
+                print(f'Epoch {epoch}, batch {i}/{len(batches)}, batch train accuracy: {acc}', end='\r')
             objective = NeuralNetworkObjectiveFunction(model, loss, X[batch], y[batch])
             optimizer.update_objective(objective)
             # objective_function = lambda: objective(var)
@@ -118,7 +120,7 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
                     'consensus': optimizer.minimizer(),
                     'particles': optimizer.particles(),
                     'batch': batch,
-                    'accuracy': accuracy.result().numpy(),
+                    'accuracy': acc,
                 }
             losses.append(objective(var))
             timestamp += optimizer_config['dt']
@@ -127,7 +129,12 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
             print(f'Timestamp: {round(timestamp, 2)}, loss: {np.mean(losses)}', end='')
             if X_val is not None:
                 val_loss = NeuralNetworkObjectiveFunction(model, loss, X_val, y_val)(var)
-                print(f', validation loss: {val_loss}', end='')
+                val_logits = model(X_val)
+                val_y_pred = tf.nn.softmax(val_logits)
+                val_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+                val_accuracy.update_state(y_val, val_y_pred)
+                val_acc = val_accuracy.result().numpy()
+                print(f', validation loss: {val_loss}, validation accuracy: {val_acc}', end='')
             print()
         if tensorboard_logging is not None:
             if X_val is not None:
