@@ -35,13 +35,12 @@ class NeuralNetworkObjectiveFunction:
         self._loss = loss
         self._X = X
         self._y = y
-        self._initial_parameters = self._get_parameters()
 
-    def _get_parameters(self):
-        parameters = []
-        for weight in self._model.trainable_weights:
-            parameters.append(tf.reshape(weight, -1))
-        return tf.concat(parameters, 0)
+    # def _get_parameters(self):
+    #     parameters = []
+    #     for weight in self._model.trainable_weights:
+    #         parameters.append(tf.reshape(weight, -1))
+    #     return tf.concat(parameters, 0)
 
     def _substitute_parameters(self, parameters):
         update_model_parameters(self._model, parameters)
@@ -50,7 +49,6 @@ class NeuralNetworkObjectiveFunction:
         self._substitute_parameters(parameters)
         output = self._model(self._X)
         loss = self._loss(self._y, output)
-        self._substitute_parameters(self._initial_parameters)
         return loss
 
 
@@ -69,7 +67,7 @@ def update_model_parameters(model, parameters):
 
 def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
           initial_distribution=None, return_trajectory=False, verbose=True, particles_batches=None,
-          dataset_batches=None, X_val=None, y_val=None, tensorboard_logging=None):
+          dataset_batches=None, X_val=None, y_val=None, tensorboard_logging=None, cooling=False):
     dimensionality = compute_model_dimensionality(model)
     if optimizer_config is None:
         optimizer_config = DEFAULT_OPTIMIZER_CONFIG.copy()
@@ -90,6 +88,7 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
     var = tf.Variable(initial_distribution.sample(dimensionality))
     timestamp = 0
     epoch = 0
+    loss_model = tf.keras.models.clone_model(model)
     while np.less(timestamp, time_horizon):
         batches = np.array_split(np.random.permutation(X.shape[0]), dataset_batches)
         losses = []
@@ -99,43 +98,49 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
             #     logits = model(X[batch])
             #     loss_value = loss(y[batch], logits)
             # grads = tape.gradient(loss_value, model.trainable_weights)
-            logits = model(X[batch])
-            loss_value = loss(y[batch], logits)
-            y_pred = tf.nn.softmax(logits)
-            tensorboard_logging.train_loss(loss_value)
-            tensorboard_logging.train_accuracy(y[batch], y_pred)
-            accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-            accuracy.update_state(y[batch], y_pred)
-            acc = accuracy.result().numpy()
-            if verbose:
-                print(f'Epoch {epoch}, batch {i}/{len(batches)}, batch train accuracy: {acc}', end='\r')
-            objective = NeuralNetworkObjectiveFunction(model, loss, X[batch], y[batch])
+            objective = NeuralNetworkObjectiveFunction(loss_model, loss, X[batch], y[batch])
             optimizer.update_objective(objective)
             # objective_function = lambda: objective(var)
             # grad_loss=tf.expand_dims(tf.zeros_like(var), 0)
             # optimizer.minimize(objective_function, [var], [tf.zeros_like(var)])
             optimizer.apply_gradients([(tf.zeros_like(var), var)])
+            model = update_model_parameters(model, var)
+
+            logits = model(X[batch])
+            loss_value = loss(y[batch], logits)
+            y_pred = tf.nn.softmax(logits)
+            tensorboard_logging.train_loss(loss_value)
+            tensorboard_logging.train_accuracy(y[batch], y_pred)
+
+            accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+            accuracy.update_state(y, model.predict(X))
+            acc = accuracy.result().numpy()
+
+            if X_val is not None:
+                val_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
+                val_accuracy.update_state(y_val, model.predict(X_val))
+                val_acc = val_accuracy.result().numpy()
+
+            if verbose:
+                log = f'Epoch {epoch}, batch {i + 1}/{len(batches)}, ' \
+                      f'batch objective: {objective(var)}, ' \
+                      f'train accuracy: {acc}'
+                if X_val is not None:
+                    log += f', val accuracy: {val_acc}'
+                print(log, end='\r')
+
             if return_trajectory:
                 trajectory[timestamp] = {
                     'consensus': optimizer.minimizer(),
                     'particles': optimizer.particles(),
                     'batch': batch,
                     'accuracy': acc,
+                    'var': var.numpy().copy(),
                 }
+
             losses.append(objective(var))
             timestamp += optimizer_config['dt']
-            update_model_parameters(model, var)
-        if verbose:
-            print(f'Timestamp: {round(timestamp, 2)}, loss: {np.mean(losses)}', end='')
-            if X_val is not None:
-                val_loss = NeuralNetworkObjectiveFunction(model, loss, X_val, y_val)(var)
-                val_logits = model(X_val)
-                val_y_pred = tf.nn.softmax(val_logits)
-                val_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-                val_accuracy.update_state(y_val, val_y_pred)
-                val_acc = val_accuracy.result().numpy()
-                print(f', validation loss: {val_loss}, validation accuracy: {val_acc}', end='')
-            print()
+
         if tensorboard_logging is not None:
             if X_val is not None:
                 logits = model(X_val)
@@ -145,6 +150,8 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
                 tensorboard_logging.test_accuracy(y_val, y_pred)
             tensorboard_logging.flush(epoch)
         epoch += 1
+        if cooling:
+            optimizer.apply_cooling(epoch)
     update_model_parameters(model, var)
     if return_trajectory:
         return model, trajectory

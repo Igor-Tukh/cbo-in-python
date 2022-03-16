@@ -20,6 +20,10 @@ class CBO(Optimizer):
         self._noise = tfd.Normal(loc=0., scale=1.)
         self._n_batches = 1 if n_batches is None else n_batches
 
+    def apply_cooling(self, epoch):
+        self._set_hyper('alpha', self._get_hyper('alpha') * 2)
+        self._sigma = self._sigma * np.log2(epoch + 1) / np.log2(epoch + 2)
+
     def minimizer(self):
         return self._compute_consensus_point()
 
@@ -33,7 +37,8 @@ class CBO(Optimizer):
         V = self._V if batch is None else tf.gather_nd(self._V, indices=batch)
         values = np.array([self._objective(v) for v in V])
         weights = np.exp(-self._get_hyper('alpha') * (values - values.min())).reshape(-1, 1)
-        return tf.reshape(tf.reduce_sum(V * weights, axis=0) / weights.sum(), (1, -1))
+        consensus = tf.reshape(tf.reduce_sum(V * weights, axis=0) / weights.sum(), (1, -1))
+        return consensus
 
     def _step(self):
         if self._n_batches == 1:
@@ -46,7 +51,7 @@ class CBO(Optimizer):
             diff = self._V - V_alpha
             noise_weight = tf.abs(diff) if self._anisotropic else tf.reshape(tf.norm(diff, ord=2, axis=1), (-1, 1))
             self._V -= self._lambda * diff * self._dt
-            self._V += self._sigma * noise * noise_weight * self._dt ** 0.5
+            self._V += self._sigma * noise * noise_weight * (self._dt ** 0.5)
 
     def _resource_apply_dense(self, grad, var, apply_state=None):
         self._step()
