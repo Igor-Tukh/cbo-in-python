@@ -29,6 +29,35 @@ class TensorboardLogging:
             tf.summary.scalar('accuracy', self.test_accuracy.result(), step=epoch)
 
 
+class UpdatableTfModel:
+    def __init__(self, model):
+        self.model = tf.keras.models.clone_model(model)
+        self.is_trainable = self._get_trainable_weights_mask()
+
+    def get_weights(self):
+        return np.concatenate([weight.reshape(-1) for weight in self.model.get_weights()]).reshape(-1)
+
+    def _get_trainable_weights_mask(self):
+        trainable_weights_names = set([w.name for w in self.model.trainable_weights])
+        weights_names = [w.name for w in self.model.weights]
+        return np.vectorize(lambda n: n in trainable_weights_names)(weights_names)
+
+    def set_weights(self, weights):
+        if isinstance(weights, tf.Tensor):
+            weights = weights.numpy()
+        weights = weights.reshape(-1)
+        new_weights = []
+        current_position = 0
+        for i, weight in enumerate(self.model.get_weights()):
+            if self.is_trainable[i]:
+                weight_len = weight.reshape(-1).shape[0]
+                new_weights.append(weights[current_position:current_position + weight_len].reshape(weight.shape))
+                current_position += weight_len
+            else:
+                new_weights.append(weight)
+        self.model.set_weights(new_weights)
+
+
 class NeuralNetworkObjectiveFunction:
     def __init__(self, model, loss, X, y):
         self._model = model
