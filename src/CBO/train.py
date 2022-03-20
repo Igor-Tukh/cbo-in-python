@@ -45,9 +45,9 @@ class NeuralNetworkObjectiveFunction:
     def _substitute_parameters(self, parameters):
         update_model_parameters(self._model, parameters)
 
-    def __call__(self, parameters):
+    def __call__(self, parameters, training=True):
         self._substitute_parameters(parameters)
-        output = self._model(self._X)
+        output = self._model(self._X, training=training)
         loss = self._loss(self._y, output)
         return loss
 
@@ -67,7 +67,8 @@ def update_model_parameters(model, parameters):
 
 def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
           initial_distribution=None, return_trajectory=False, verbose=True, particles_batches=None,
-          dataset_batches=None, X_val=None, y_val=None, tensorboard_logging=None, cooling=False):
+          update_all_particles=True, dataset_batches=None, X_val=None, y_val=None, tensorboard_logging=None,
+          cooling=False):
     dimensionality = compute_model_dimensionality(model)
     if optimizer_config is None:
         optimizer_config = DEFAULT_OPTIMIZER_CONFIG.copy()
@@ -81,6 +82,7 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
         'initial_particles': initial_distribution.sample((n_particles, dimensionality)),
         'objective': None,
         'n_batches': particles_batches,
+        'update_all_particles': update_all_particles,
     })
     dataset_batches = 1 if dataset_batches is None else dataset_batches
     optimizer = CBO(**optimizer_config)
@@ -105,28 +107,33 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
             # optimizer.minimize(objective_function, [var], [tf.zeros_like(var)])
             optimizer.apply_gradients([(tf.zeros_like(var), var)])
             model = update_model_parameters(model, var)
+            print(model.trainable_weights)
+            print('---')
+            print(model.get_weights())
+            print('---')
+            print('---')
 
-            logits = model(X[batch])
+            logits = model(X[batch], training=True)
             loss_value = loss(y[batch], logits)
             y_pred = tf.nn.softmax(logits)
             tensorboard_logging.train_loss(loss_value)
             tensorboard_logging.train_accuracy(y[batch], y_pred)
 
             accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-            accuracy.update_state(y, model.predict(X))
+            accuracy.update_state(y, model(X, training=True))
             acc = accuracy.result().numpy()
 
             if X_val is not None:
                 val_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-                val_accuracy.update_state(y_val, model.predict(X_val))
+                val_accuracy.update_state(y_val, model(X_val, training=False))
                 val_acc = val_accuracy.result().numpy()
 
             if verbose:
                 log = f'Epoch {epoch}, batch {i + 1}/{len(batches)}, ' \
-                      f'batch objective: {objective(var)}, ' \
-                      f'train accuracy: {acc}'
+                      f'batch objective: {str(round(objective(var).numpy(), 3))}, ' \
+                      f'train accuracy: {str(round(acc, 3))}'
                 if X_val is not None:
-                    log += f', val accuracy: {val_acc}'
+                    log += f', val accuracy: {str(round(val_acc, 3))}'
                 print(log, end='\r')
 
             if return_trajectory:
@@ -143,7 +150,7 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
 
         if tensorboard_logging is not None:
             if X_val is not None:
-                logits = model(X_val)
+                logits = model(X_val, training=False)
                 loss_value = loss(y_val, logits)
                 y_pred = tf.nn.softmax(logits)
                 tensorboard_logging.test_loss(loss_value)
