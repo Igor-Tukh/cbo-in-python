@@ -31,52 +31,46 @@ class TensorboardLogging:
 
 class UpdatableTfModel:
     def __init__(self, model):
-        self.model = tf.keras.models.clone_model(model)
-        self.is_trainable = self._get_trainable_weights_mask()
+        self._model = tf.keras.models.clone_model(model)
+        self._is_trainable = self._get_trainable_weights_mask()
 
     def get_weights(self):
-        return np.concatenate([weight.reshape(-1) for weight in self.model.get_weights()]).reshape(-1)
+        return np.concatenate([weight.reshape(-1) for weight in self._model.get_weights()]).reshape(-1)
+
+    def get_model(self):
+        return self._model
 
     def _get_trainable_weights_mask(self):
-        trainable_weights_names = set([w.name for w in self.model.trainable_weights])
-        weights_names = [w.name for w in self.model.weights]
+        trainable_weights_names = set([w.name for w in self._model.trainable_weights])
+        weights_names = [w.name for w in self._model.weights]
         return np.vectorize(lambda n: n in trainable_weights_names)(weights_names)
 
     def set_weights(self, weights):
-        if isinstance(weights, tf.Tensor):
+        if isinstance(weights, tf.Tensor) or isinstance(weights, tf.Variable):
             weights = weights.numpy()
         weights = weights.reshape(-1)
         new_weights = []
         current_position = 0
-        for i, weight in enumerate(self.model.get_weights()):
-            if self.is_trainable[i]:
+        for i, weight in enumerate(self._model.get_weights()):
+            if self._is_trainable[i]:
                 weight_len = weight.reshape(-1).shape[0]
                 new_weights.append(weights[current_position:current_position + weight_len].reshape(weight.shape))
                 current_position += weight_len
             else:
                 new_weights.append(weight)
-        self.model.set_weights(new_weights)
+        self._model.set_weights(new_weights)
 
 
 class NeuralNetworkObjectiveFunction:
     def __init__(self, model, loss, X, y):
-        self._model = model
+        self._model = UpdatableTfModel(model)
         self._loss = loss
         self._X = X
         self._y = y
 
-    # def _get_parameters(self):
-    #     parameters = []
-    #     for weight in self._model.trainable_weights:
-    #         parameters.append(tf.reshape(weight, -1))
-    #     return tf.concat(parameters, 0)
-
-    def _substitute_parameters(self, parameters):
-        update_model_parameters(self._model, parameters)
-
     def __call__(self, parameters, training=True):
-        self._substitute_parameters(parameters)
-        output = self._model(self._X, training=training)
+        self._model.set_weights(parameters)
+        output = self._model.get_model()(self._X, training=training)
         loss = self._loss(self._y, output)
         return loss
 
@@ -120,6 +114,8 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
     timestamp = 0
     epoch = 0
     loss_model = tf.keras.models.clone_model(model)
+    model = UpdatableTfModel(model)
+    overall_objective = NeuralNetworkObjectiveFunction(loss_model, loss, X, y)
     while np.less(timestamp, time_horizon):
         batches = np.array_split(np.random.permutation(X.shape[0]), dataset_batches)
         losses = []
@@ -135,30 +131,26 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
             # grad_loss=tf.expand_dims(tf.zeros_like(var), 0)
             # optimizer.minimize(objective_function, [var], [tf.zeros_like(var)])
             optimizer.apply_gradients([(tf.zeros_like(var), var)])
-            model = update_model_parameters(model, var)
-            print(model.trainable_weights)
-            print('---')
-            print(model.get_weights())
-            print('---')
-            print('---')
+            model.set_weights(var)
 
-            logits = model(X[batch], training=True)
+            logits = model.get_model()(X[batch], training=True)
             loss_value = loss(y[batch], logits)
             y_pred = tf.nn.softmax(logits)
             tensorboard_logging.train_loss(loss_value)
             tensorboard_logging.train_accuracy(y[batch], y_pred)
 
             accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-            accuracy.update_state(y, model(X, training=True))
+            accuracy.update_state(y, model.get_model()(X, training=True))
             acc = accuracy.result().numpy()
 
             if X_val is not None:
                 val_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
-                val_accuracy.update_state(y_val, model(X_val, training=False))
+                val_accuracy.update_state(y_val, model.get_model()(X_val, training=False))
                 val_acc = val_accuracy.result().numpy()
 
             if verbose:
                 log = f'Epoch {epoch}, batch {i + 1}/{len(batches)}, ' \
+                      f'objective: {str(round(overall_objective(var).numpy(), 3))}, ' \
                       f'batch objective: {str(round(objective(var).numpy(), 3))}, ' \
                       f'train accuracy: {str(round(acc, 3))}'
                 if X_val is not None:
@@ -179,7 +171,7 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
 
         if tensorboard_logging is not None:
             if X_val is not None:
-                logits = model(X_val, training=False)
+                logits = model.get_model()(X_val, training=False)
                 loss_value = loss(y_val, logits)
                 y_pred = tf.nn.softmax(logits)
                 tensorboard_logging.test_loss(loss_value)
@@ -188,7 +180,6 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
         epoch += 1
         if cooling:
             optimizer.apply_cooling(epoch)
-    update_model_parameters(model, var)
     if return_trajectory:
-        return model, trajectory
-    return model
+        return model.get_model(), trajectory
+    return model.get_model()
