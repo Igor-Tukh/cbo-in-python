@@ -31,8 +31,9 @@ def minimize(objective, dimensionality, n_particles, time_horizon, optimizer_con
     var = tf.Variable([initial_distribution.sample(dimensionality)])
     range_wrapper = tqdm if verbose else lambda i: i
     for timestamp in range_wrapper(np.arange(0, time_horizon + 1e-9, optimizer_config['dt'])):
-        loss = lambda: objective(var)
-        optimizer.minimize(loss, [var])
+        # loss = lambda: objective(var)
+        # optimizer.minimize(loss, [var])
+        optimizer.apply_gradients([(tf.zeros_like(var), var)])
         if return_trajectory:
             trajectory[timestamp] = {
                 'consensus': optimizer.minimizer(),
