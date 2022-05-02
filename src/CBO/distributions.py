@@ -10,5 +10,6 @@ def Normal(loc=0., scale=1.):
 
 
 class NumpyNormal:
-    def sample(self, size):
-        return tf.convert_to_tensor(np.random.normal(0, 1, size))
+    @staticmethod
+    def sample(size):
+        return tf.convert_to_tensor(np.random.normal(0, 1, size).astype(np.float32))

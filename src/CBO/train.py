@@ -91,7 +91,7 @@ def update_model_parameters(model, parameters):
 def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
           initial_distribution=None, return_trajectory=False, verbose=True, particles_batches=None,
           update_all_particles=True, dataset_batches=None, X_val=None, y_val=None, tensorboard_logging=None,
-          cooling=False, evaluation_sample_size=None, evaluation_rate=None):
+          cooling=False, evaluation_sample_size=None, evaluation_rate=None, use_multiprocessing=False):
     dimensionality = compute_model_dimensionality(model)
     if optimizer_config is None:
         optimizer_config = DEFAULT_OPTIMIZER_CONFIG.copy()
@@ -110,6 +110,7 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
         'objective': None,
         'n_batches': particles_batches,
         'update_all_particles': update_all_particles,
+        'use_multiprocessing': use_multiprocessing,
     })
     optimizer = CBO(**optimizer_config)
 
