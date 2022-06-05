@@ -24,7 +24,7 @@ class CBO(Optimizer):
         self._V = initial_particles
         self._n_particles = self._V.shape[0]
         self._anisotropic = anisotropic
-        # self._noise = tfd.Normal(loc=0., scale=1.)
+        # self._noise = tfd.Normal(loc=0., scale=1.)x
         self._noise = NumpyNormal
         self._n_batches = 1 if n_batches is None else n_batches
         self._old_consensus = tf.zeros_like(self._V[0])
