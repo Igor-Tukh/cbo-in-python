@@ -109,7 +109,7 @@ class CBO(Optimizer):
             V_alpha = self._compute_consensus_point(batch=np.random.choice(self._n_particles, replace=False,
                                                                            size=self._n_particles//self._n_batches))
             if np.less(tf.norm(self._old_consensus - tf.reshape(V_alpha, -1), ord=2, axis=0), 1e-5):
-                self._V += self._sigma * (self._dt ** 0.5) * self._noise.sample(self._V.shape)
+                            self._V += self._sigma * (self._dt ** 0.5) * self._noise.sample(self._V.shape)
             self._old_consensus = tf.reshape(V_alpha, -1)
 
     @staticmethod
