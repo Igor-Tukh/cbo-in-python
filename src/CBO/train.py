@@ -2,6 +2,8 @@ import os
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
+import wandb
+
 
 from tqdm.auto import tqdm
 from src.CBO.config import DEFAULT_OPTIMIZER_CONFIG, DEFAULT_INITIAL_DISTRIBUTION
@@ -91,7 +93,7 @@ def update_model_parameters(model, parameters):
 def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
           initial_distribution=None, return_trajectory=False, verbose=True, particles_batches=None,
           update_all_particles=True, dataset_batches=None, X_val=None, y_val=None, tensorboard_logging=None,
-          cooling=False, evaluation_sample_size=None, evaluation_rate=None, use_multiprocessing=False):
+          cooling=False, evaluation_sample_size=None, evaluation_rate=None, use_multiprocessing=False, eps=1e-3):
     dimensionality = compute_model_dimensionality(model)
     if optimizer_config is None:
         optimizer_config = DEFAULT_OPTIMIZER_CONFIG.copy()
@@ -111,6 +113,7 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
         'n_batches': particles_batches,
         'update_all_particles': update_all_particles,
         'use_multiprocessing': use_multiprocessing,
+        'eps': eps,
     })
     optimizer = CBO(**optimizer_config)
 
@@ -165,9 +168,17 @@ def train(model, loss, X, y, n_particles, time_horizon, optimizer_config=None,
                     val_acc = val_accuracy.result().numpy()
 
                 if verbose:
+                    obj = objective(var).numpy()
+                    wandb.log({
+                        'epoch': epoch,
+                        'train_accuracy': acc,
+                        'train_loss': obj,
+                        'val_accuracy': val_acc,
+                        'consensus_shift': optimizer.consensus_shift,
+                    })
                     #  # f'objective: {str(round(overall_objective(var).numpy(), 3))}, ' \
                     log = f'Epoch {epoch}, batch {i + 1}/{len(batches)}, ' \
-                          f'batch objective: {str(round(objective(var).numpy(), 3))}, ' \
+                          f'batch objective: {str(round(obj, 3))}, ' \
                           f'train accuracy: {str(round(acc, 3))}'
                     if X_val is not None:
                         log += f', val accuracy: {str(round(val_acc, 3))}'

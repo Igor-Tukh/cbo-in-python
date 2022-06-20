@@ -1,12 +1,18 @@
+import multiprocessing
+
 import torch
 import numpy as np
 
 from src.torch.particle import Particle
+from src.torch.cbo import cbo_update, compute_v_alpha
+
+from torch.utils.data import DataLoader
 
 
 class Optimizer:
     # TODO: does it need to be inherited from `torch.optim.Optimizer`?
-    def __init__(self, model, n_particles=10, l=1, alpha=100, sigma=1, dt=0.01, anisotropic=True, eps=1e-2):
+    def __init__(self, model, n_particles=10, l=1, alpha=100, sigma=1, dt=0.01, anisotropic=True, eps=1e-2,
+                 use_multiprocessing=False, particles_batch_size=None):
         """
         Consensus based optimizer.
         :param model: model to optimize.
@@ -18,6 +24,8 @@ class Optimizer:
         :param anisotropic: boolean flag indicating whether to use the anisotropic noise or not.
         :param eps: argument indicating how small the consensus update has to be to apply the additional random shift to
         particles.
+        :param use_multiprocessing: whether to use multiprocessing where possible.
+        :param particles_batch_size: batch size for particle-level batching. If not specified, no batching will be used.
         """
         # CBO hyperparameters
         self.n_particles = n_particles
@@ -29,6 +37,9 @@ class Optimizer:
         # Additional hyperparameters
         self.eps = eps  # specifies how small the consensus updated has to be to apply the additional shift
         self.time = 0
+        # Multiprocessing
+        self.use_multiprocessing = use_multiprocessing
+        self.pool = multiprocessing.Pool() if use_multiprocessing else None
         # Initialize required internal fields
         self.particles = []
         self.outputs = None
@@ -43,6 +54,9 @@ class Optimizer:
         # Initialize particles
         self.model = model
         self._initialize_particles()
+        self.particles_batch_size = particles_batch_size if particles_batch_size is not None else self.n_particles
+        self.particles_dataloader = DataLoader(np.arange(self.n_particles), batch_size=self.particles_batch_size,
+                                               shuffle=True, num_workers=min(2, multiprocessing.cpu_count()))
 
     def _initialize_particles(self):
         self.particles = [Particle(self.model) for _ in range(self.n_particles)]
@@ -56,11 +70,13 @@ class Optimizer:
             particle.set_params(new_particle_params)
 
     def _compute_particles_outputs(self):
-        # TODO: parallelize it
         values = []
-        for particle in self.particles:
-            values.append(particle(self.X))
-        return values
+        if self.use_multiprocessing:
+            values = self.pool.starmap(_forward, [(p, self.X) for p in self.particles])
+        else:
+            for particle in self.particles:
+                values.append(particle(self.X))
+        return torch.stack(values)
 
     def _update_model_params(self):
         if self.V_alpha is None:
@@ -93,17 +109,7 @@ class Optimizer:
         """
         # TODO: embed into CBO library, use the external call instead
         values = torch.FloatTensor([self.loss(output, self.y) for output in self.outputs])
-        weights = torch.exp(-self.alpha * (values - values.min())).reshape(-1, 1)
-        self.consensus = (weights * self.V) / weights.sum()
-        return self.consensus.sum(dim=0)
-
-    def _cbo_update(self):
-        # TODO: embed into CBO library
-        noise = torch.randn(self.V.shape)
-        diff = self.V - self.V_alpha
-        noise_weight = torch.abs(diff) if self.anisotropic else torch.norm(diff, p=2, dim=1)
-        self.V -= self.l * diff * self.dt
-        self.V += self.sigma * noise_weight * noise * (self.dt ** 0.5)
+        return compute_v_alpha(values, self.V, self.alpha)
 
     def step(self):
         """
@@ -112,17 +118,22 @@ class Optimizer:
         if self.X is None:
             raise RuntimeError('Unable to perform the step without the prior loss.backward() call')
         self.V = self._get_particles_params()
-        self.V_alpha_old = self.V_alpha.clone() if self.V_alpha is not None else None
-        self.V_alpha = self.compute_consensus()
-        self._cbo_update()
+        for particles_batch in self.particles_dataloader:
+            self.V_alpha_old = self.V_alpha.clone() if self.V_alpha is not None else None
+            energy_values = torch.FloatTensor([self.loss(output, self.y) for output in self.outputs[particles_batch]])
+            self.V_alpha = compute_v_alpha(energy_values, self.V[particles_batch], self.alpha)
+            self.V = cbo_update(self.V, self.V_alpha, self.anisotropic, self.l, self.sigma, self.dt)
+            self.maybe_apply_additional_shift()
+        self._set_particles_params(self.V)
+        self._update_model_params()
+        self.time += self.dt
+
+    def maybe_apply_additional_shift(self):
         if self.V_alpha_old is not None:
             norm = torch.norm(self.V_alpha.view(-1) - self.V_alpha_old.view(-1), p=float('inf'), dim=0).detach().numpy()
             if np.less(norm, self.eps):
                 self.V += self.sigma * (self.dt ** 0.5) * torch.randn(self.V.shape)
             self.shift_norm = norm
-        self._set_particles_params(self.V)
-        self._update_model_params()
-        self.time += self.dt
 
     def zero_grad(self):
         """
@@ -137,3 +148,8 @@ class Optimizer:
         Returns the current timestamp. Timestamp is incremented bt the `dt` on every optimization step,
         """
         return self.time
+
+
+# Multiprocessing helper functions
+def _forward(model, X):
+    return model(X).detach()

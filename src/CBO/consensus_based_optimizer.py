@@ -13,12 +13,13 @@ from tensorflow.keras.optimizers import Optimizer
 
 class CBO(Optimizer):
     def __init__(self, objective, dt, lmbda, sigma, alpha, initial_particles, anisotropic=True, n_batches=None,
-                 update_all_particles=True, use_multiprocessing=False):
+                 update_all_particles=True, use_multiprocessing=False, eps=1e-3):
         super(CBO, self).__init__('Consensus Based Optimizer')
         self._objective = objective
         self._dt = dt
         self._lambda = lmbda
         self._sigma = sigma
+        self.eps = eps
         # In case if we want to use non-constant alpha values
         self._set_hyper('alpha', alpha)
         self._V = initial_particles
@@ -87,9 +88,10 @@ class CBO(Optimizer):
                     self._V += tf.scatter_nd(indices=tf.constant(batch.reshape(-1, 1)), updates=V_update,
                                              shape=self._V.shape)
 
-                if np.less(tf.norm(self._old_consensus - tf.reshape(V_alpha, -1), ord=2, axis=0), 1e-5):
+                self.consensus_shift = tf.norm(self._old_consensus - tf.reshape(V_alpha, -1), ord=np.inf, axis=0)
+                if np.less(self.consensus_shift, self.eps):
                     self._V += self._sigma * (self._dt ** 0.5) * self._noise.sample(self._V.shape)
-                    self._old_consensus = tf.reshape(V_alpha, -1)
+                self._old_consensus = tf.reshape(V_alpha, -1)
         else:
             batch_Vs = [tf.gather(self._V, tf.reshape(batch, -1)) for batch in batches]
             objective_values = np.array([self._objective(v) for v in self._V])
@@ -108,8 +110,9 @@ class CBO(Optimizer):
                                          shape=self._V.shape)
             V_alpha = self._compute_consensus_point(batch=np.random.choice(self._n_particles, replace=False,
                                                                            size=self._n_particles//self._n_batches))
-            if np.less(tf.norm(self._old_consensus - tf.reshape(V_alpha, -1), ord=2, axis=0), 1e-5):
-                            self._V += self._sigma * (self._dt ** 0.5) * self._noise.sample(self._V.shape)
+            self.consensus_shift = tf.norm(self._old_consensus - tf.reshape(V_alpha, -1), ord=np.inf, axis=0)
+            if np.less(self.consensus_shift, self.eps):
+                self._V += self._sigma * (self._dt ** 0.5) * self._noise.sample(self._V.shape)
             self._old_consensus = tf.reshape(V_alpha, -1)
 
     @staticmethod
