@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+import numpy as np
+
 from copy import deepcopy
 
 
@@ -36,3 +38,12 @@ class Particle(nn.Module):
             with torch.no_grad():
                 p.copy_(new_params[next_slice: next_slice + slice_length].view(p.shape))
             next_slice += slice_length
+
+    def get_gradient(self):
+        """
+        Returns the gradients stacked into a 1d-tensor.
+        """
+        gradients = [p.grad for p in self.model.parameters()]
+        if None in gradients:
+            return None
+        return torch.cat([g.view(-1) for g in gradients]).view(-1)

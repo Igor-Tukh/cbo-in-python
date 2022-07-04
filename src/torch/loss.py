@@ -29,8 +29,7 @@ class Loss:
         """
         self.optimizer.set_batch(X, y)
         if backward_gradients:
-            loss_value = self.loss(self.optimizer.model(X), y)
-            loss_value.backward()
+            self.optimizer.backward(self.loss)
 
     def set_data_batch(self, X, y):
         """
