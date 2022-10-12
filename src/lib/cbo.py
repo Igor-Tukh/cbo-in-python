@@ -20,7 +20,7 @@ def _determine_backend(*args):
 def _determine_and_validate_backend(backend, *args):
     backend = _determine_backend(*args) if backend is None else backend
     if backend is None:
-        raise RuntimeError(f'Cannot automatically identify backend to use. Please provide specify backend'
+        raise RuntimeError(f'Cannot automatically identify backend to use. Please specify backend'
                            f'explicitly with the `backend` option. Supported backends: {SUPPORTED_BACKENDS_STR},')
     if backend not in SUPPORTED_BACKENDS:
         raise RuntimeError(f'Provided backend option {backend} is not (currently) supported. '
@@ -45,4 +45,7 @@ def minimize(function, dimensionality, n_particles, n_particles_batches, time_ho
              use_multiprocessing, return_trajectory=False, backend='torch'):
     backend = _determine_and_validate_backend(backend)
     if backend == 'torch':
+        # return torch_cbo.minimize(function, dimensionality, n_particles, n_particles_batches,
+        #                           time_horizon, initial_distribution, dt, l, sigma, alpha,
+        #                           anisotropic, use_multiprocessing, return_trajectory)
         pass

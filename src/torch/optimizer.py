@@ -1,3 +1,5 @@
+# TODO(itukh): fix energy values calculation
+
 import multiprocessing
 
 import torch
@@ -5,6 +7,7 @@ import numpy as np
 
 from src.torch.particle import Particle
 from src.torch.cbo import cbo_update, compute_v_alpha
+from src.torch.utils import inplace_randn
 
 from torch.utils.data import DataLoader
 
@@ -55,8 +58,6 @@ class Optimizer:
         self.n_processes = min(n_processes, multiprocessing.cpu_count())
         # Device (CPU / GPU / TPU) settings
         self.device = torch.device('cpu') if device is None else device
-        if device is not None:
-            self.to(device)
         if self.use_multiprocessing and self.device.type == 'cuda':
             raise RuntimeError('Unable to use multiprocessing along with cuda')
         # Initialize required internal fields
@@ -78,6 +79,9 @@ class Optimizer:
         self.particles_batch_size = particles_batch_size if particles_batch_size is not None else self.n_particles
         self.particles_dataloader = DataLoader(np.arange(self.n_particles), batch_size=self.particles_batch_size,
                                                shuffle=True)
+        if device is not None:
+            self.to(device)
+        # Constants
         self.infinity = 1e5
 
     def set_loss(self, loss):
@@ -100,6 +104,7 @@ class Optimizer:
         Returns the consensus computed based on the current particles positions.
         """
         outputs = self.outputs if batch is None else [self.outputs[i] for i in batch]
+        # TODO(itukh): check this line
         values = torch.FloatTensor([self.loss(output, self.y) for output in outputs])
         alpha = self.alpha if alpha is None else alpha
         return compute_v_alpha(values, self.V[batch], alpha, self.device)
@@ -190,7 +195,8 @@ class Optimizer:
             norm = torch.norm(self.V_alpha.view(-1) - self.V_alpha_old.view(-1), p=float('inf'),
                               dim=0).detach().cpu().numpy()
             if np.less(norm, self.eps):
-                self.V += self.sigma * (self.dt ** 0.5) * torch.randn(self.V.shape).to(self.device)
+                self.V += self.sigma * (self.dt ** 0.5) * inplace_randn(self.V.shape, self.device)
+
             self.shift_norm = norm
 
     def _maybe_apply_gradient_shift(self, batch=None):
