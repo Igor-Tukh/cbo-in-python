@@ -63,7 +63,6 @@ class Optimizer:
         # Initialize required internal fields
         self.time = 0
         self.particles = []
-        self.outputs = None
         self.loss = None
         self.X = None
         self.y = None
@@ -72,7 +71,6 @@ class Optimizer:
         self.V_alpha_old = None
         self.shift_norm = None
         self.consensus = None
-        self.energy_values = None
         # Initialize particles
         self.model = model
         self._initialize_particles()
@@ -97,13 +95,12 @@ class Optimizer:
         """
         self.X = X.to(self.device)
         self.y = y.to(self.device)
-        self.outputs = self._compute_particles_outputs()
 
-    def compute_consensus(self, batch=None, alpha=None):
+    def compute_consensus(self, batch=None, alpha=None, outputs=None):
         """
         Returns the consensus computed based on the current particles positions.
         """
-        outputs = self.outputs if batch is None else [self.outputs[i] for i in batch]
+        outputs = self._compute_particles_outputs(batch) if outputs is None else outputs
         # TODO(itukh): check this line
         values = torch.FloatTensor([self.loss(output, self.y) for output in outputs])
         alpha = self.alpha if alpha is None else alpha
@@ -117,13 +114,14 @@ class Optimizer:
             raise RuntimeError('Unable to perform the step without the prior loss.backward() call')
         self.V = self._get_particles_params()
         # TODO: parallelize the line below?
-        self.energy_values = torch.FloatTensor([self.loss(output, self.y) for output in self.outputs]).to(self.device)
         if self.use_multiprocessing:
+            outputs = self._compute_particles_outputs()
+            energy_values = torch.FloatTensor([self.loss(output, self.y) for output in outputs]).to(self.device)
             self.V_alpha_old = self.V_alpha.clone() if self.V_alpha is not None else None
             self.V_alpha = self.compute_consensus(batch=self._generate_random_batch())  # TODO: check this line
 
             batches = [batch for batch in self.particles_dataloader]
-            params = [(self.energy_values[batch].detach(), self.V[batch].detach(), self.alpha, self.anisotropic,
+            params = [(energy_values[batch].detach(), self.V[batch].detach(), self.alpha, self.anisotropic,
                        self.l, self.sigma, self.dt) for batch in batches]
             with multiprocessing.Pool(processes=self.n_processes) as pool:
                 new_V = pool.starmap(_batch_step, params)
@@ -133,9 +131,11 @@ class Optimizer:
             self._maybe_apply_gradient_shift()
         else:
             for particles_batch in self.particles_dataloader:
+                # TODO
+                outputs = self._compute_particles_outputs(particles_batch)
+                energy_values = torch.FloatTensor([self.loss(output, self.y) for output in outputs]).to(self.device)
                 self.V_alpha_old = self.V_alpha.clone() if self.V_alpha is not None else None
-                self.V_alpha = compute_v_alpha(self.energy_values[particles_batch], self.V[particles_batch], self.alpha,
-                                               self.device)
+                self.V_alpha = compute_v_alpha(energy_values, self.V[particles_batch], self.alpha, self.device)
                 if self.partial_update:
                     self.V[particles_batch] = cbo_update(self.V[particles_batch], self.V_alpha, self.anisotropic,
                                                          self.l, self.sigma, self.dt, self.device)
@@ -153,9 +153,9 @@ class Optimizer:
         """
         Applies backpropagation for each dynamics particle.
         """
-        if self.outputs is None:
-            self.outputs = self._compute_particles_outputs()
-        for output in self.outputs:
+        # TODO: use stack here instead
+        outputs = self._compute_particles_outputs()
+        for output in outputs:
             loss_value = loss(output, self.y)
             loss_value.backward()
 
@@ -209,15 +209,14 @@ class Optimizer:
     def _maybe_apply_common_drift(self):
         if not self.apply_common_drift:
             return
-        self.outputs = self._compute_particles_outputs()
-        self.energy_values = torch.FloatTensor([self.loss(output, self.y) for output in self.outputs]).to(self.device)
-        self.V_alpha = compute_v_alpha(self.energy_values, self.V, self.alpha, self.device)
+        outputs = self._compute_particles_outputs()
+        energy_values = torch.FloatTensor([self.loss(output, self.y) for output in outputs]).to(self.device)
+        self.V_alpha = compute_v_alpha(energy_values, self.V, self.alpha, self.device)
         self.V = cbo_update(self.V, self.V_alpha, self.anisotropic, self.l, self.sigma, self.dt, self.device)
         self._set_particles_params(self.V)
 
     def _initialize_particles(self):
         self.particles = [Particle(self.model) for _ in range(self.n_particles)]
-        self.outputs = [None for _ in range(self.n_particles)]
 
     def _get_particles_params(self):
         return torch.stack([particle.get_params() for particle in self.particles])
@@ -226,14 +225,16 @@ class Optimizer:
         for particle, new_particle_params in zip(self.particles, new_particles_params):
             particle.set_params(new_particle_params)
 
-    def _compute_particles_outputs(self):
+    def _compute_particles_outputs(self, batch=None):
+        # TODO: implement in a more efficient manner
+        batch = np.arange(len(self.particles)) if batch is None else batch
         values = []
         if self.use_multiprocessing:
             with multiprocessing.Pool(processes=self.n_processes) as pool:
-                values = pool.starmap(_forward, [(p, self.X) for p in self.particles])
+                values = pool.starmap(_forward, [(self.particles[i], self.X) for i in batch])
         else:
-            for particle in self.particles:
-                values.append(particle(self.X))
+            for i in batch:
+                values.append(self.particles[i](self.X))
         return values
 
     def _update_model_params(self):
@@ -263,5 +264,5 @@ def _forward(model, X):
 
 
 def _batch_step(energy_values, V, alpha, anisotropic, l, sigma, dt):
-    V_alpha = compute_v_alpha(energy_values, V, alpha, self.device)
+    V_alpha = compute_v_alpha(energy_values, V, alpha)
     return cbo_update(V, V_alpha, anisotropic, l, sigma, dt)
