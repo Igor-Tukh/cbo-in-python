@@ -50,8 +50,8 @@ def minimize(
     # Setting up computations on GPU / CPU
     device = torch.device('cuda') if (use_gpu_if_available and torch.cuda.is_available()) else torch.device('cpu')
     # Standardize input arguments
-    batch_size = n_particles // n_particles_batches if batch_size is None else batch_size
-    epochs = time_horizon // dt if epochs is None else epochs
+    batch_size = int(n_particles // n_particles_batches) if batch_size is None else batch_size
+    epochs = int(time_horizon // dt) if epochs is None else epochs
     # Initialize variables
     V = initial_distribution.sample((n_particles, dimensionality)).to(device)
     if use_additional_gradients_shift:

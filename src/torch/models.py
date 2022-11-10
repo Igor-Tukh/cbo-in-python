@@ -34,12 +34,13 @@ class LeNet5(nn.Module):
         )
 
         self.mlp = nn.Sequential(
-            nn.Linear(16 * 5 * 5, 120),
+            nn.Linear(16 * 4 * 4, 120),
             nn.ReLU(),
             nn.Linear(120, 84),
             nn.ReLU(),
-            nn.Linear(120, 10))
+            nn.Linear(84, 10),
+            nn.LogSoftmax())
 
     def forward(self, x):
         output = self.cnn(x)
-        return self.fc(output.view(x.shape[0], -1))
+        return self.mlp(output.view(x.shape[0], -1))
