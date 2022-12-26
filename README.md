@@ -19,7 +19,7 @@ virtualenv -p python3 ~/virtualenvs/cbo
 ```
 * Activate new environment:
 ```
-source ~/virutalenvs/cbo/bin/activate
+source ~/virtualenvs/cbo/bin/activate
 ```
 * Install the dependencies:
 ```
@@ -31,6 +31,14 @@ Alternatively, one can install the missing libraries via the following command:
 pip install -r requirements.txt
 ```
 It is highly recommended to use environments when working with Python dependencies, though. One may consider using `conda` for enviroments and packages managing as an alternative approach.
+
+
+## Quick Start
+### Functions minimization
+TODO
+### Neural Networks training
+TODO
+
 
 ## Examples
 ### Demo scripts
