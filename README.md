@@ -34,10 +34,7 @@ It is highly recommended to use environments when working with Python dependenci
 
 ## Examples
 ### Demo scripts
-We provide a few demo CLI scripts in [demo folder](https://github.com/Igor-Tukh/cbo-in-python/tree/master/demo).
+We provide a few demo CLI scripts in the [demo folder](https://github.com/Igor-Tukh/cbo-in-python/tree/master/demo).
 
 ### Notebooks
-* Please refer to [`notebooks/torch_cbo_on_mnist.ipynb`](https://github.com/Igor-Tukh/cbo-in-python/blob/master/notebooks/torch_cbo_on_mnist.ipynb) for details on torch implementation of CBO.
-* Please refer to [`notebooks/minimize_pytorch.ipynb`](https://github.com/Igor-Tukh/cbo-in-python/blob/master/notebooks/minimize_pytorch.ipynb) for  examples on functions minimization and visualization via `PyTorch` implementation.
-* Please refer to [`notebooks/functions_minimization_examples.ipynb`](https://github.com/Igor-Tukh/cbo-in-python/blob/master/notebooks/functions_minimization_examples.ipynb) to view examples on functions minimization and visualization via Tensorflow implementation.
-* Some experiments on training neural networks via CBO can be found in folder [`notebooks/experiments`](https://github.com/Igor-Tukh/cbo-in-python/tree/master/notebooks/experiments).
+We also publish different jupyter notebooks containing experiments and examples using this CBO library in the [notebooks folder](https://github.com/Igor-Tukh/cbo-in-python/tree/master/notebooks).
