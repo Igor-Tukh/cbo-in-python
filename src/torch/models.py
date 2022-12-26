@@ -26,17 +26,21 @@ class LeNet5(nn.Module):
 
         self.cnn = nn.Sequential(
             nn.Conv2d(1, 6, 5),
+            nn.BatchNorm2d(6, affine=False),
             nn.Tanh(),
             nn.AvgPool2d(2),
             nn.Conv2d(6, 16, 5),
+            nn.BatchNorm2d(16, affine=False),
             nn.Tanh(),
             nn.AvgPool2d(2),
         )
 
         self.mlp = nn.Sequential(
             nn.Linear(16 * 4 * 4, 120),
+            nn.BatchNorm1d(120, affine=False),
             nn.ReLU(),
             nn.Linear(120, 84),
+            nn.BatchNorm1d(84, affine=False),
             nn.ReLU(),
             nn.Linear(84, 10),
             nn.LogSoftmax())

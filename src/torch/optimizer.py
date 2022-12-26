@@ -1,6 +1,6 @@
 # TODO(itukh): fix energy values calculation
 
-import multiprocessing
+import torch.multiprocessing as mp
 
 import torch
 import numpy as np
@@ -55,7 +55,7 @@ class Optimizer:
         self.evaluation_strategy = evaluation_strategy
         # Multiprocessing settings
         self.use_multiprocessing = use_multiprocessing
-        self.n_processes = min(n_processes, multiprocessing.cpu_count())
+        self.n_processes = min(n_processes, mp.cpu_count())
         # Device (CPU / GPU / TPU) settings
         self.device = torch.device('cpu') if device is None else device
         if self.use_multiprocessing and self.device.type == 'cuda':
@@ -123,7 +123,7 @@ class Optimizer:
             batches = [batch for batch in self.particles_dataloader]
             params = [(energy_values[batch].detach(), self.V[batch].detach(), self.alpha, self.anisotropic,
                        self.l, self.sigma, self.dt) for batch in batches]
-            with multiprocessing.Pool(processes=self.n_processes) as pool:
+            with mp.Pool(processes=self.n_processes) as pool:
                 new_V = pool.starmap(_batch_step, params)
             for new_batch_V, batch in zip(new_V, batches):
                 self.V[batch] = new_batch_V
@@ -204,7 +204,7 @@ class Optimizer:
             return
         batch = np.arange(self.V.shape[0]) if batch is None else batch
         self.V[batch] -= torch.cat([self.particles[i].get_gradient() for i in batch]).view(
-            self.V[batch].shape) * self.gamma
+            self.V[batch].shape) * self.gamma * self.dt
 
     def _maybe_apply_common_drift(self):
         if not self.apply_common_drift:
@@ -230,7 +230,7 @@ class Optimizer:
         batch = np.arange(len(self.particles)) if batch is None else batch
         values = []
         if self.use_multiprocessing:
-            with multiprocessing.Pool(processes=self.n_processes) as pool:
+            with mp.Pool(processes=self.n_processes) as pool:
                 values = pool.starmap(_forward, [(self.particles[i], self.X) for i in batch])
         else:
             for i in batch:
