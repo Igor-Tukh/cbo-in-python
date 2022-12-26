@@ -6,7 +6,7 @@ To highlight the possibilities of the library, and provide some additional examp
 
 ### Neural Networks training
 
-`torch_nn_demo.py` provides a command line interface for training a few standard neural networks at the `MNIST` dataset and visualizing the training progress.
+`torch_nn_demo.py` provides a command line interface for training a few standard neural networks on the `MNIST` dataset and visualizing the training progress.
 
 #### Instructions
 
