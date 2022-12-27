@@ -6,8 +6,8 @@ import tensorflow as tf
 
 sys.path.extend([os.pardir, os.path.join(os.pardir, os.pardir)])
 
-from src.CBO.consensus_based_optimizer import CBO
-from src.CBO.config import DEFAULT_OPTIMIZER_CONFIG, DEFAULT_INITIAL_DISTRIBUTION
+from src.tensorflow.consensus_based_optimizer import CBO
+from src.tensorflow.config import DEFAULT_OPTIMIZER_CONFIG, DEFAULT_INITIAL_DISTRIBUTION
 from tqdm import tqdm
 
 

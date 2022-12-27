@@ -4,7 +4,7 @@ import tensorflow_probability as tfp
 
 import multiprocessing
 
-from src.CBO.distributions import NumpyNormal
+from src.tensorflow.distributions import NumpyNormal
 
 tfd = tfp.distributions
 
