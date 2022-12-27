@@ -103,4 +103,6 @@ def minimize(
 
     energy_values = compute_energy_values(function, V, device=device)
     V_alpha = compute_v_alpha(energy_values, V, alpha, device=device)
-    return V_alpha.detach().cpu(), trajectory
+    if return_trajectory:
+        return V_alpha.detach().cpu(), trajectory
+    return V_alpha.detach().cpu()
