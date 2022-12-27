@@ -35,9 +35,9 @@ It is highly recommended to use environments when working with Python dependenci
 
 ## Quick Start
 ### Functions minimization
-TODO
+Please refer to [this notebook](https://github.com/Igor-Tukh/cbo-in-python/blob/master/notebooks/functions_minimization_pytorch.ipynb).
 ### Neural Networks training
-TODO
+Please refer to [this notebook](https://github.com/Igor-Tukh/cbo-in-python/blob/master/notebooks/nn_mnist_torch.ipynb).
 
 
 ## Examples
