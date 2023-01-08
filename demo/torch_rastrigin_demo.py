@@ -31,6 +31,8 @@ if __name__ == '__main__':
     parser.add_argument('--partial_update', type=bool, default=True, help='whether to use partial or full update')
     parser.add_argument('--cooling', type=bool, default=False, help='whether to apply cooling strategy')
 
+    parser.add_argument('--use_gpu_if_available', action='store_true', help='specify to use GPU if it is available')
+
     args = parser.parse_args()
 
     objective = rastrigin_c(args.rastrigin_constant)
@@ -40,6 +42,7 @@ if __name__ == '__main__':
         function=objective, dimensionality=args.dim, n_particles=args.particles,
         initial_distribution=Normal(args.loc, args.scale),
         n_particles_batches=args.particles_batches, dt=args.dt, l=args.l, sigma=args.sigma, alpha=args.alpha,
-        anisotropic=args.anisotropic, epochs=args.epochs, return_trajectory=False, cooling=args.cooling)
+        anisotropic=args.anisotropic, epochs=args.epochs, return_trajectory=False, cooling=args.cooling,
+        use_gpu_if_available=args.use_gpu_if_available)
     elapsed_time = time.time() - start_time
     print(f'Finished after {args.epochs} and {elapsed_time} seconds. Final minimizer: {minimizer}.')

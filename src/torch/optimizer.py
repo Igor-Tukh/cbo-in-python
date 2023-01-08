@@ -58,8 +58,10 @@ class Optimizer:
         self.n_processes = min(n_processes, mp.cpu_count())
         # Device (CPU / GPU / TPU) settings
         self.device = torch.device('cpu') if device is None else device
-        if self.use_multiprocessing and self.device.type == 'cuda':
-            raise RuntimeError('Unable to use multiprocessing along with cuda')
+        if self.use_multiprocessing:
+            if device.type == 'cuda':
+                raise RuntimeError('Unable to use multiprocessing along with cuda')
+            torch.set_num_threads(1)
         # Initialize required internal fields
         self.time = 0
         self.particles = []
@@ -120,15 +122,16 @@ class Optimizer:
         if self.X is None:
             raise RuntimeError('Unable to perform the step without the prior loss.backward() call')
         self.V = self._get_particles_params()
-        # TODO: parallelize the line below?
         if self.use_multiprocessing:
+            self.V.share_memory_()
             outputs = self._compute_particles_outputs()
             energy_values = torch.FloatTensor([self.loss(output, self.y) for output in outputs]).to(self.device)
             self.V_alpha_old = self.V_alpha.clone() if self.V_alpha is not None else None
             self.V_alpha = self.compute_consensus(batch=self._generate_random_batch())  # TODO: check this line
 
             batches = [batch for batch in self.particles_dataloader]
-            params = [(energy_values[batch].detach(), self.V[batch].detach(), self.alpha, self.anisotropic,
+            # q = mp.Queue()  Could we use it here?
+            params = [(energy_values, self.V, batch, self.alpha, self.anisotropic,
                        self.l, self.sigma, self.dt) for batch in batches]
             with mp.Pool(processes=self.n_processes) as pool:
                 new_V = pool.starmap(_batch_step, params)
@@ -138,7 +141,6 @@ class Optimizer:
             self._maybe_apply_gradient_shift()
         else:
             for particles_batch in self.particles_dataloader:
-                # TODO
                 outputs = self._compute_particles_outputs(particles_batch)
                 energy_values = torch.FloatTensor([self.loss(output, self.y) for output in outputs]).to(self.device)
                 self.V_alpha_old = self.V_alpha.clone() if self.V_alpha is not None else None
