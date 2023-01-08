@@ -3,7 +3,7 @@
 ## Description
 `CBO-in-python` is a library for working with Consensus-Based Optimization (**CBO**) in Python. The library provides an interface to perform CBO to minimize functions and train neural networks. 
 
-To conveniently work with neural networks, we deliver our library as two models: one for working with `PyTorch` and one for working with `TensorFlow` (two major machine learning frameworks). Nevertheless, our general focus is on the PyTorch module. While we provide limited TensorFlow support and some usage examples, we recommend using the PyTorch module. We are no longer updating the TensorFlow module, and the current implementation might include bugs.
+To conveniently work with neural networks, we deliver our library as two modules: one for working with `PyTorch` and one for working with `TensorFlow` (two major machine learning frameworks). Nevertheless, our general focus is on the PyTorch module. While we provide limited TensorFlow support and some usage examples, we recommend using the PyTorch module. We are no longer updating the TensorFlow module, and the current implementation might include bugs.
 
 
 ## Setup
@@ -48,7 +48,7 @@ We provide a few demo CLI scripts in the [demo folder](https://github.com/Igor-T
 We also publish different jupyter notebooks containing experiments and examples using this CBO library in the [notebooks folder](https://github.com/Igor-Tukh/cbo-in-python/tree/master/notebooks).
 
 ## References
-For theoretical insides, one may refer to the following publications:
+For theoretical insights, one may refer to the following publications:
 * **Consensus-Based Optimization Methods Converge Globally** ([arxiv](https://arxiv.org/abs/2103.15130))
 * **Convergence of Anisotropic Consensus-Based Optimization in Mean-Field Law** ([arxiv](https://arxiv.org/abs/2111.08136), [springer](https://link.springer.com/chapter/10.1007/978-3-031-02462-7_46))
 * **Leveraging Memory Effects and Gradient Information in Consensus-Based Optimization: On Global Convergence in Mean-Field Law** ([arxiv](https://arxiv.org/abs/2211.12184))
