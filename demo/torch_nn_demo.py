@@ -16,6 +16,7 @@ from src.datasets import load_mnist_dataloaders
 from src.torch import Optimizer, Loss
 
 MODELS = {
+    'TinyMLP': TinyMLP,
     'SmallMLP': SmallMLP,
     'LeNet5': LeNet5,
 }

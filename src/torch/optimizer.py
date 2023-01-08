@@ -71,6 +71,7 @@ class Optimizer:
         self.V_alpha_old = None
         self.shift_norm = None
         self.consensus = None
+        self.epoch = 1
         # Initialize particles
         self.model = model
         self._initialize_particles()
@@ -81,6 +82,11 @@ class Optimizer:
             self.to(device)
         # Constants
         self.infinity = 1e5
+
+    def cooling_step(self):
+        self.alpha = self.alpha * 2
+        self.sigma = self.sigma * np.log2(self.epoch + 1) / np.log2(self.epoch + 2)
+        self.epoch += 1
 
     def set_loss(self, loss):
         """
@@ -100,6 +106,7 @@ class Optimizer:
         """
         Returns the consensus computed based on the current particles positions.
         """
+        batch = np.arange(len(self.particles)) if batch is None else batch
         outputs = self._compute_particles_outputs(batch) if outputs is None else outputs
         # TODO(itukh): check this line
         values = torch.FloatTensor([self.loss(output, self.y) for output in outputs])

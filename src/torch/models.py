@@ -1,6 +1,22 @@
 import torch.nn as nn
 
 
+class TinyMLP(nn.Module):
+    def __init__(self):
+        super(TinyMLP, self).__init__()
+
+        self.model = nn.Sequential(
+            nn.Flatten(1, 3),
+            nn.Linear(28 ** 2, 10),
+            nn.ReLU(),
+            nn.BatchNorm1d(10, affine=False, momentum=None),
+            nn.LogSoftmax(),
+        )
+
+    def forward(self, x):
+        return self.model(x)
+
+
 class SmallMLP(nn.Module):
     def __init__(self):
         super(SmallMLP, self).__init__()
