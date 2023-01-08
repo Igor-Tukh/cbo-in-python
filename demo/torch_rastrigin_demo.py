@@ -29,6 +29,7 @@ if __name__ == '__main__':
     parser.add_argument('--anisotropic', type=bool, default=True, help='whether to use anisotropic or not')
     parser.add_argument('--eps', type=float, default=1e-5, help='threshold for additional random shift')
     parser.add_argument('--partial_update', type=bool, default=True, help='whether to use partial or full update')
+    parser.add_argument('--cooling', type=bool, default=False, help='whether to apply cooling strategy')
 
     args = parser.parse_args()
 
@@ -39,6 +40,6 @@ if __name__ == '__main__':
         function=objective, dimensionality=args.dim, n_particles=args.particles,
         initial_distribution=Normal(args.loc, args.scale),
         n_particles_batches=args.particles_batches, dt=args.dt, l=args.l, sigma=args.sigma, alpha=args.alpha,
-        anisotropic=args.anisotropic, epochs=args.epochs, return_trajectory=False)
+        anisotropic=args.anisotropic, epochs=args.epochs, return_trajectory=False, cooling=args.cooling)
     elapsed_time = time.time() - start_time
     print(f'Finished after {args.epochs} and {elapsed_time} seconds. Final minimizer: {minimizer}.')

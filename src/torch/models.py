@@ -36,6 +36,30 @@ class SmallMLP(nn.Module):
         return self.model(x)
 
 
+class LeNet1(nn.Module):
+    def __init__(self):
+        super(LeNet1, self).__init__()
+
+        self.cnn = nn.Sequential(
+            nn.Conv2d(1, 4, 5),
+            nn.BatchNorm2d(4, affine=False, momentum=None),
+            nn.ReLU(),
+            nn.AvgPool2d(2),
+            nn.Conv2d(4, 12, 5),
+            nn.BatchNorm2d(12, affine=False, momentum=None),
+            nn.ReLU(),
+            nn.AvgPool2d(2),
+        )
+
+        self.mlp = nn.Sequential(
+            nn.Linear(12 * 4 * 4, 10),
+            nn.LogSoftmax())
+
+    def forward(self, x):
+        output = self.cnn(x)
+        return self.mlp(output.view(x.shape[0], -1))
+
+
 class LeNet5(nn.Module):
     def __init__(self):
         super(LeNet5, self).__init__()

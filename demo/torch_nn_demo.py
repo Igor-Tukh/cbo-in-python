@@ -18,6 +18,7 @@ from src.torch import Optimizer, Loss
 MODELS = {
     'TinyMLP': TinyMLP,
     'SmallMLP': SmallMLP,
+    'LeNet1': LeNet1,
     'LeNet5': LeNet5,
 }
 
@@ -37,7 +38,7 @@ def _evaluate(model, X_, y_, loss_fn):
 
 def train(model, train_dataloader, test_dataloader, device, use_multiprocessing, processes,
           epochs, particles, particles_batch_size,
-          alpha, sigma, l, dt, anisotropic, eps, partial_update,
+          alpha, sigma, l, dt, anisotropic, eps, partial_update, cooling,
           eval_freq):
     train_accuracies = []
     train_losses = []
@@ -85,6 +86,8 @@ def train(model, train_dataloader, test_dataloader, device, use_multiprocessing,
                     flush=True)
         train_accuracies.append(np.mean(epoch_train_accuracies))
         train_losses.append(np.mean(epoch_train_losses))
+        if cooling:
+            optimizer.cooling_step()
 
     return train_accuracies, test_accuracies, train_losses, test_losses
 
@@ -147,6 +150,7 @@ if __name__ == '__main__':
     parser.add_argument('--anisotropic', type=bool, default=True, help='whether to use anisotropic or not')
     parser.add_argument('--eps', type=float, default=1e-5, help='threshold for additional random shift')
     parser.add_argument('--partial_update', type=bool, default=True, help='whether to use partial or full update')
+    parser.add_argument('--cooling', type=bool, default=False, help='whether to apply cooling strategy')
 
     parser.add_argument('--build_plot', required=False, action='store_true',
                         help='specify to build loss and accuracy plot')
@@ -177,6 +181,7 @@ if __name__ == '__main__':
     result = train(model, train_dataloader, test_dataloader, device, use_multiprocessing, args.processes,
                    args.epochs, args.particles, args.particles_batch_size,
                    args.alpha, args.sigma, args.l, args.dt, args.anisotropic, args.eps, args.partial_update,
+                   args.cooling,
                    args.eval_freq)
     print(f'Elapsed time: {time.time() - start_time} seconds')
     if args.build_plot:

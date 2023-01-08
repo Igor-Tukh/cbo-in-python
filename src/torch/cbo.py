@@ -46,7 +46,8 @@ def minimize(
         best_particle_alpha=1e5,
         use_gpu_if_available=False,
         use_multiprocessing=False,
-        return_trajectory=False):
+        return_trajectory=False,
+        cooling=False):
     # Setting up computations on GPU / CPU
     device = torch.device('cuda') if (use_gpu_if_available and torch.cuda.is_available()) else torch.device('cpu')
     # Standardize input arguments
@@ -100,6 +101,10 @@ def minimize(
                     'V_best': V_best.clone().detach().cpu(),
                 }
             )
+
+        if cooling:
+            alpha = alpha * 2
+            sigma = sigma * np.log2(epoch + 1) / np.log2(epoch + 2)
 
     energy_values = compute_energy_values(function, V, device=device)
     V_alpha = compute_v_alpha(energy_values, V, alpha, device=device)
